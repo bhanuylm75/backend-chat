@@ -20,6 +20,7 @@ const JWT_SECRET = "zoom";
 
 
 import mongoose from 'mongoose';
+import { channel } from 'diagnostics_channel';
 
 const dbURI = 'mongodb+srv://bhanuylm01:bhanuylm@cluster-chat.sws0r.mongodb.net/?retryWrites=true&w=majority';
 
@@ -220,36 +221,69 @@ app.get("/api/messages/:chatId", async (req, res) => {
 
 
 // This endpoint creates a new chat with a given chatId and chatPartner details.
-app.post("/", async (req, res) => {
-  const { userid, chatPartner } = req.body;
+app.post("/addtomychats", async (req, res) => {
+  let { user, chatPartner, chatid } = req.body;
+  console.log(chatid)
 
-  
-  if (!userid || !chatPartner || !chatPartner._id) {
+  if (!user || !chatPartner || !chatPartner._id || !chatid) {
     return res.status(400).json({ message: "Missing required fields" });
   }
-
   try {
-    // Check if a chat document already exists for this user and chat partner.
-    const existingChat = await Chat.findOne({ userid, "chatPartner._id": chatPartner._id });
-    if (!existingChat) {
-      const newChat = new Chat({
-        userid,
-        chatPartner,
+    // 🔍 Check if chat already exists
+    let chat = await Chat.findOne({ chatid });
+
+    if (!chat) {
+      // Create a new chat only if it does not exist
+      chat = new Chat({
+        chatid,
+        participants: [
+          { _id: user.id, name: user.name, email: user.email, profilePic: user.profilePic },
+          { _id: chatPartner._id, name: chatPartner.name, email: chatPartner.email, profilePic: chatPartner.profilePic }
+        ]
       });
-      await newChat.save();
-  
-      return res.status(201).json({
-        message: "Chat created successfully",
-        chat: newChat,
-      });
+      await chat.save();
+      return res.status(201).json({ message: "Chat created successfully", chat });
     }
 
-    
+    return res.send({ message: "Chat already exists", chat });
+
+
   } catch (error) {
     console.error("Error creating chat:", error);
     return res.status(500).json({ message: "Server error creating chat" });
   }
+
+ 
 });
+
+
+
+
+
+
+
+app.get("/mychats/:userid", async (req, res) => {
+  const { userid } = req.params;
+  console.log(userid)
+
+  try {
+    // 🔍 Find chats where the user is a participant
+    const chats = await Chat.find({ "participants._id": userid });
+
+    // Extract and send only the other participant's details
+    const otherParticipants = chats.map(chat => 
+      chat.participants.find(participant => participant._id !== userid)
+    );
+
+    return res.status(200).json(otherParticipants);
+  } catch (error) {
+    console.error("Error fetching chats:", error);
+    return res.status(500).json({ message: "Server error fetching chats" });
+  }
+});
+
+
+
 
 
 
