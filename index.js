@@ -7,13 +7,17 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import Message from './models/messagemodel.js';
 import Chat from './models/mychatsmodel.js';
+//import cookieParser from "cookie-parser";
+
 
 import http from 'http';
 dotenv.config();
 
 const app = express();
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors()
+);;
 const port = process.env.PORT || 3002;
 //const dbURI = process.env.DB_URI;
 const JWT_SECRET = "zoom";
@@ -27,7 +31,8 @@ const dbURI = 'mongodb+srv://bhanuylm01:bhanuylm@cluster-chat.sws0r.mongodb.net/
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // adjust if needed for security
+    origin: "*",
+   
     methods: ["GET", "POST"]
   }
 });
@@ -52,103 +57,88 @@ app.get("/",(req,res)=>{
 })
 
 
-app.post('/api/register', async (req, res) => {
-  console.log(req.body)
+app.use(cookieParser()); // Middleware to parse cookies
+
+// 🔹 Utility function to generate a JWT token
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "1h" });
+};
+
+app.post("/api/login", async (req, res) => {
+  console.log("jjj")
   try {
-    const { name, email, password, profilePic } = req.body;
+    const { email, password } = req.body;
 
-    // Validate required fields
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Please provide name, email, and password' });
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({ message: 'User already exists' });
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Hash the password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
 
-    // Create and save the new user
-    const newUser = new User({
-      name,
-      email,
-      password: hashedPassword,
-      profilePic: profilePic || '',  // Defaults to an empty string if not provided
-    });
+    const token = generateToken(user._id);
 
-    await newUser.save();
+ 
+  
 
-    // Generate a JWT token
-    const token = jwt.sign(
-      { userId: newUser._id, email: newUser.email },
-      JWT_SECRET,
-      { expiresIn: '1h' }  // Token valid for 1 hour
-    );
-
-    // Respond with the user data and token
-    res.status(201).json({
-      message: 'User registered successfully',
-      user: {
-        id: newUser._id,
-        name: newUser.name,
-        email: newUser.email,
-        profilePic: newUser.profilePic,
-      },
+    res.status(200).json({
+      message: "Login successful",
       token,
+      user: { id: user._id, name: user.name, email: user.email, profilePic: user.profilePic },
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    console.error("Login error:", error);
+    res.status(500).json({ message: "Server error during login" });
   }
 });
 
+// 🔹 Logout Route (Fixed CORS & Cookies)
+app.post("/api/logout", (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: true, // Ensure this is `false` for local development without HTTPS
+    sameSite: "lax",
+  });
 
-app.post('/login', async (req, res) => {
+  res.status(200).json({ message: "Logged out successfully" });
+});
+
+app.post("/api/register", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    
-    // Validate email and password
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Please provide email and password' });
+    const { name, email, password, profilePic } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "Name, email, and password are required" });
     }
-    
-    // Find user by email
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(409).json({ message: "User already exists" });
     }
-    
-    // Compare provided password with hashed password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Generate a JWT token
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-    
-    // Respond with user data (excluding password) and token
-    res.status(200).json({
-      message: 'Login successful',
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        profilePic: user.profilePic,
-      },
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = new User({ name, email, password: hashedPassword, profilePic: profilePic || "" });
+    await newUser.save();
+
+    const token = generateToken(newUser._id);
+
+    // ✅ Secure cookie settings
+   
+    res.status(201).json({
+      message: "User registered successfully",
       token,
+      user: { id: newUser._id, name, email, profilePic: newUser.profilePic },
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error("Registration error:", error);
+    res.status(500).json({ message: "Server error during registration" });
   }
 });
 
@@ -354,7 +344,40 @@ io.on("connection",(socket)=>{
 
 
 
-server.listen(port, () => {
+server.listen(port,() => {
   connectDB();
   console.log(`Server is running on http://localhost:${port}`);
 });
+
+
+
+
+const users = [
+  { name: "John Doe", email: "johndoe@example.com", password: "$2a$10$wI3E2F4K5L6M7N8O9P0Q" },
+  { name: "Jane Smith", email: "janesmith@example.com", password: "$2a$10$A1B2C3D4E5F6G7H8I9J0" },
+  { name: "Alice Johnson", email: "alicejohnson@example.com", password: "$2a$10$K9L8M7N6O5P4Q3R2S1T" },
+  { name: "Bob Brown", email: "bobbrown@example.com", password: "$2a$10$U1V2W3X4Y5Z6A7B8C9D" },
+  { name: "Charlie Davis", email: "charliedavis@example.com", password: "$2a$10$E1F2G3H4I5J6K7L8M9N" },
+  { name: "David Wilson", email: "davidwilson@example.com", password: "$2a$10$O1P2Q3R4S5T6U7V8W9X" },
+  { name: "Emma Thomas", email: "emmathomas@example.com", password: "$2a$10$Y1Z2A3B4C5D6E7F8G9H" },
+  { name: "Frank Garcia", email: "frankgarcia@example.com", password: "$2a$10$I1J2K3L4M5N6O7P8Q9R" },
+  { name: "Grace Lee", email: "gracelee@example.com", password: "$2a$10$S1T2U3V4W5X6Y7Z8A9B" },
+  { name: "Henry Martinez", email: "henrymartinez@example.com", password: "$2a$10$C1D2E3F4G5H6I7J8K9L" },
+  { name: "Isabella Lopez", email: "isabellalopez@example.com", password: "$2a$10$M1N2O3P4Q5R6S7T8U9V" },
+  { name: "Jack White", email: "jackwhite@example.com", password: "$2a$10$W1X2Y3Z4A5B6C7D8E9F" },
+  { name: "Kelly Harris", email: "kellyharris@example.com", password: "$2a$10$G1H2I3J4K5L6M7N8O9P" },
+  { name: "Liam Clark", email: "liamclark@example.com", password: "$2a$10$Q1R2S3T4U5V6W7X8Y9Z" },
+  { name: "Mia Rodriguez", email: "miarodriguez@example.com", password: "$2a$10$A1B2C3D4E5F6G7H8I9J" },
+  { name: "Nathan Lewis", email: "nathanlewis@example.com", password: "$2a$10$K1L2M3N4O5P6Q7R8S9T" },
+  { name: "Olivia Walker", email: "oliviawalker@example.com", password: "$2a$10$U1V2W3X4Y5Z6A7B8C9D" },
+  { name: "Peter Allen", email: "peterallen@example.com", password: "$2a$10$E1F2G3H4I5J6K7L8M9N" },
+  { name: "Quinn Young", email: "quinnyoung@example.com", password: "$2a$10$O1P2Q3R4S5T6U7V8W9X" },
+  { name: "Ryan King", email: "ryanking@example.com", password: "$2a$10$Y1Z2A3B4C5D6E7F8G9H" },
+  { name: "Sophia Scott", email: "sophiascott@example.com", password: "$2a$10$I1J2K3L4M5N6O7P8Q9R" },
+  { name: "Tyler Green", email: "tylergreen@example.com", password: "$2a$10$S1T2U3V4W5X6Y7Z8A9B" },
+  { name: "Uma Adams", email: "umaadams@example.com", password: "$2a$10$C1D2E3F4G5H6I7J8K9L" },
+  { name: "Victor Nelson", email: "victornelson@example.com", password: "$2a$10$M1N2O3P4Q5R6S7T8U9V" },
+  { name: "Wendy Carter", email: "wendycarter@example.com", password: "$2a$10$W1X2Y3Z4A5B6C7D8E9F" },
+];
+
+// Seed function
