@@ -57,7 +57,6 @@ app.get("/",(req,res)=>{
 })
 
 
-app.use(cookieParser()); // Middleware to parse cookies
 
 // 🔹 Utility function to generate a JWT token
 const generateToken = (userId) => {
