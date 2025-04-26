@@ -7,6 +7,8 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import Message from './models/messagemodel.js';
 import Chat from './models/mychatsmodel.js';
+import Group from './models/groupmodel.js';
+import Groupmessage from "./models/groupchatmodel.js"
 //import cookieParser from "cookie-parser";
 
 
@@ -276,9 +278,106 @@ app.get("/mychats/:userid", async (req, res) => {
 
 
 
+app.post('/creategroup', async (req, res) => {
+  console.log(req.body)
+  try {
+    const { name, members, admin } = req.body;
+
+    if (!name || !members || !admin) {
+      return res.status(400).json({ error: 'Missing fields' });
+    }
+
+    // Ensure admin is included in the members array
+if (!members.includes(admin)) {
+  members.push(admin);
+}
+
+
+    // Create the group
+    const newGroup = new Group({
+      name,
+      members,
+      admin
+    });
+
+    const savedGroup = await newGroup.save();
+
+    // OPTIONAL: Add this group to each user's group array
+    await User.updateMany(
+      { _id: { $in: members } },
+      { $addToSet: { groups: savedGroup._id } } // ensure no duplicates
+    );
+
+    res.status(201).json(savedGroup);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+// GET /user/:userId/groups
+
+
+app.get('/getgroups/:userId', async (req, res) => {
+  console.log("abc")
+  try {
+    const groups = await Group.find({
+      members: req.params.userId
+    }).populate('admin', 'name email'); // optional: show admin info
+    console.log(groups)
+
+    res.json(groups);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
 const userSocketMap = {};
 io.on("connection",(socket)=>{
   console.log("A user connected: " + socket.id);
+
+
+   
+
+  socket.on("joinGroup", async (groupId) => {
+    socket.join(groupId);
+    console.log(`User joined group ${groupId}`);
+
+   
+  });
+
+  socket.on("groupMessage", async ({ groupId, senderId, text }) => {
+    try {
+      const message = new Groupmessage({ groupId, senderId, text });
+      await message.save();
+      const populatedMessage = await Groupmessage.findById(message._id)
+  .populate('senderId', 'name');
+
+
+      console.log("Saved & populated message:", populatedMessage);
+  
+      io.to(groupId).emit("groupMessage", populatedMessage);
+    } catch (err) {
+      console.error("Failed to save message:", err);
+    }
+  });
+  
+
+  
+
 
   socket.on("chat messages",(msg)=>{
     console.log("Message received:", msg);
@@ -379,4 +478,4 @@ const users = [
   { name: "Wendy Carter", email: "wendycarter@example.com", password: "$2a$10$W1X2Y3Z4A5B6C7D8E9F" },
 ];
 
-// Seed function
+

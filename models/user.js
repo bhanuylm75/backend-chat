@@ -22,8 +22,14 @@ const userSchema = new Schema(
     },
     profilePic: {
       type: String,
-      default: '', // Empty string if no URL is provided
+      default: '',
     },
+    groups: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Group', // Assuming your Group model is named 'Group'
+      }
+    ]
   },
   {
     timestamps: true,
