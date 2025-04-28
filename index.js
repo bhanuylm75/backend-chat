@@ -335,6 +335,23 @@ app.get('/getgroups/:userId', async (req, res) => {
   }
 });
 
+// GET details of a single group
+app.get('/getgroupdetails/:groupId', async (req, res) => {
+  const { groupId } = req.params;
+
+  try {
+    const group = await Group.findById(groupId);
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    res.status(200).json(group);
+  } catch (error) {
+    console.error('Error fetching group:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
 
 
 
