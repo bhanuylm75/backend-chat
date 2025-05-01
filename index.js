@@ -353,6 +353,19 @@ app.get('/getgroupdetails/:groupId', async (req, res) => {
   }
 });
 
+// api to get grouo messags based on group id
+app.get("/group-messages/:groupId", async (req, res) => {
+  const { groupId } = req.params;
+
+  try {
+    const messages = await Groupmessage.find({ groupId }).populate('senderId', 'name').sort({ createdAt: 1 }); // ascending by time
+    res.status(200).json(messages);
+  } catch (error) {
+    console.error("Error fetching group messages:", error);
+    res.status(500).json({ error: "Failed to retrieve messages" });
+  }
+});
+
 
 
 
