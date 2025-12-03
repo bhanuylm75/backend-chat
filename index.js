@@ -507,5 +507,3 @@ const users = [
   { name: "Victor Nelson", email: "victornelson@example.com", password: "$2a$10$M1N2O3P4Q5R6S7T8U9V" },
   { name: "Wendy Carter", email: "wendycarter@example.com", password: "$2a$10$W1X2Y3Z4A5B6C7D8E9F" },
 ];
-
-
